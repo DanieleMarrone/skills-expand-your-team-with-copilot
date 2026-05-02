@@ -568,6 +568,15 @@ document.addEventListener("DOMContentLoaded", () => {
           </div>
         `
         }
+        <div class="share-container">
+          <button class="share-button" aria-label="Share this activity">
+            🔗 Share
+          </button>
+          <div class="share-menu hidden">
+            <button class="share-option copy-link-button">📋 Copy Link</button>
+            <button class="share-option email-share-button">✉️ Email</button>
+          </div>
+        </div>
       </div>
     `;
 
@@ -587,7 +596,88 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
+    // Add click handler for share button
+    const shareButton = activityCard.querySelector(".share-button");
+    shareButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      shareActivity(name, details, activityCard);
+    });
+
     activitiesList.appendChild(activityCard);
+  }
+
+  // Track the AbortController for the current open share menu's outside-click listener
+  let shareMenuCloseController = null;
+
+  // Function to share an activity
+  function shareActivity(name, details, cardElement) {
+    const formattedSchedule = formatSchedule(details);
+    const shareText = `Check out "${name}" at Mergington High School!\n${details.description}\nSchedule: ${formattedSchedule}`;
+    const shareUrl = window.location.href;
+
+    // Use the Web Share API if available (works great on mobile)
+    if (navigator.share) {
+      navigator.share({ title: name, text: shareText, url: shareUrl }).catch(
+        (err) => {
+          // Ignore user cancellations; log any unexpected errors
+          if (err.name !== "AbortError") {
+            console.error("Share failed:", err);
+          }
+        }
+      );
+      return;
+    }
+
+    // Fallback: show share menu with copy link and email options
+    const shareMenu = cardElement.querySelector(".share-menu");
+    const isMenuVisible = !shareMenu.classList.contains("hidden");
+
+    // Cancel any existing outside-click listener and close all open menus
+    if (shareMenuCloseController) {
+      shareMenuCloseController.abort();
+      shareMenuCloseController = null;
+    }
+    document.querySelectorAll(".share-menu").forEach((menu) => {
+      menu.classList.add("hidden");
+    });
+
+    if (isMenuVisible) {
+      return;
+    }
+
+    shareMenu.classList.remove("hidden");
+
+    // Copy link button
+    const copyLinkButton = cardElement.querySelector(".copy-link-button");
+    copyLinkButton.onclick = () => {
+      navigator.clipboard.writeText(shareUrl).then(() => {
+        copyLinkButton.textContent = "✅ Copied!";
+        setTimeout(() => {
+          copyLinkButton.textContent = "📋 Copy Link";
+          shareMenu.classList.add("hidden");
+        }, 1500);
+      });
+    };
+
+    // Email button — assign to location.href so the email client opens without navigating the page away
+    const emailButton = cardElement.querySelector(".email-share-button");
+    emailButton.onclick = () => {
+      const subject = encodeURIComponent(`Join me: ${name}`);
+      const body = encodeURIComponent(`${shareText}\n\nLearn more: ${shareUrl}`);
+      window.location.href = `mailto:?subject=${subject}&body=${body}`;
+      shareMenu.classList.add("hidden");
+    };
+
+    // Close menu when clicking outside, using AbortController for cleanup
+    shareMenuCloseController = new AbortController();
+    document.addEventListener(
+      "click",
+      () => {
+        shareMenu.classList.add("hidden");
+        shareMenuCloseController = null;
+      },
+      { once: true, signal: shareMenuCloseController.signal }
+    );
   }
 
   // Event listeners for search and filter
